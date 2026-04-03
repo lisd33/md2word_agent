@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/template_requirement.schema.json",
+  "title": "TemplateRequirement",
+  "type": "object",
+  "required": ["document_family", "source_kinds", "required_sections", "optional_sections"],
+  "properties": {
+    "document_family": {"type": "string"},
+    "source_kinds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["template_file", "rule_text", "content_draft", "structured_spec", "mixed_input", "unknown"]
+      }
+    },
+    "required_sections": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sectionRequirement"}
+    },
+    "optional_sections": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sectionRequirement"}
+    },
+    "citation_style": {"type": ["string", "null"]},
+    "formatting_constraints": {"type": "object"},
+    "figure_requirements": {"type": "object"},
+    "notes": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "sectionRequirement": {
+      "type": "object",
+      "required": ["title", "level", "required", "notes"],
+      "properties": {
+        "title": {"type": "string"},
+        "level": {"type": "integer", "minimum": 1},
+        "required": {"type": "boolean"},
+        "section_type": {"type": ["string", "null"]},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

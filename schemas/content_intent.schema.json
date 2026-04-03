@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/content_intent.schema.json",
+  "title": "ContentIntent",
+  "type": "object",
+  "required": ["keywords", "constraints"],
+  "properties": {
+    "title": {"type": ["string", "null"]},
+    "domain": {"type": ["string", "null"]},
+    "paper_type": {"type": ["string", "null"]},
+    "keywords": {"type": "array", "items": {"type": "string"}},
+    "has_experiments": {"type": ["boolean", "null"]},
+    "has_figures": {"type": ["boolean", "null"]},
+    "source_summary": {"type": ["string", "null"]},
+    "constraints": {"type": "array", "items": {"type": "string"}}
+  }
+}

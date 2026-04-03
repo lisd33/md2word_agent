@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/document_ir.schema.json",
+  "title": "DocumentIR",
+  "type": "object",
+  "required": ["source_kinds", "sections", "metadata", "references", "figures"],
+  "properties": {
+    "document_title": {"type": ["string", "null"]},
+    "template_family": {"type": ["string", "null"]},
+    "source_kinds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["template_file", "rule_text", "content_draft", "structured_spec", "mixed_input", "unknown"]
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/documentSectionPlan"}
+    },
+    "metadata": {"type": "object"},
+    "references": {
+      "type": "array",
+      "items": {"type": "object", "additionalProperties": {"type": "string"}}
+    },
+    "figures": {
+      "type": "array",
+      "items": {"type": "object"}
+    }
+  },
+  "$defs": {
+    "documentSectionPlan": {
+      "type": "object",
+      "required": ["title", "level", "action", "children"],
+      "properties": {
+        "title": {"type": "string"},
+        "level": {"type": "integer", "minimum": 1},
+        "action": {
+          "type": "string",
+          "enum": ["keep", "optionalize", "remove", "add", "split", "merge"]
+        },
+        "section_type": {"type": ["string", "null"]},
+        "summary": {"type": ["string", "null"]},
+        "children": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/documentSectionPlan"}
+        }
+      }
+    }
+  }
+}
