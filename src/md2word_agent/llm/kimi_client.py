@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import json
+from urllib import request, error
+
+from .config import KimiConfig
+
+
+class KimiClient:
+    def __init__(self, config: KimiConfig) -> None:
+        self.config = config
+
+    def generate_json(self, *, system_prompt: str, user_prompt: str) -> dict:
+        if not self.config.api_key or self.config.api_key == "your_moonshot_api_key":
+            raise RuntimeError("MOONSHOT_API_KEY is not configured. Please update md2word_agent/.env or your shell environment.")
+
+        payload = {
+            "model": self.config.model,
+            "temperature": self.config.temperature,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        body = json.dumps(payload).encode("utf-8")
+        req = request.Request(
+            self.config.base_url.rstrip("/") + "/chat/completions",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.config.api_key}",
+            },
+            method="POST",
+        )
+        try:
+            with request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"Kimi API request failed: {exc.code} {detail}") from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"Kimi API request failed: {exc.reason}") from exc
+
+        content = data["choices"][0]["message"]["content"]
+        return _parse_json_content(content)
+
+
+def _parse_json_content(content: str | list[dict]) -> dict:
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            text = item.get("text") or item.get("content") or ""
+            if text:
+                parts.append(text)
+        content = "\n".join(parts)
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:].strip()
+    return json.loads(cleaned)
