@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 
-SUPPORTED_PROVIDERS = {"moonshot", "minimax"}
+SUPPORTED_PROVIDERS = {"moonshot", "minimax", "zhipu"}
 
 
 @dataclass(slots=True)
@@ -21,6 +21,14 @@ class MinimaxConfig:
     base_url: str
     model: str
     temperature: float = 1.0
+
+
+@dataclass(slots=True)
+class ZhipuConfig:
+    api_key: str
+    base_url: str
+    model: str
+    temperature: float = 0.6
 
 
 def _read_dotenv(path: Path) -> dict[str, str]:
@@ -46,6 +54,8 @@ def resolve_provider(env_path: str | Path | None = None, provider: str | None = 
     selected = (provider or _load_env(env_path).get("LLM_PROVIDER", "moonshot")).strip().lower()
     if selected == "kimi":
         selected = "moonshot"
+    if selected == "zhipuai":
+        selected = "zhipu"
     if selected not in SUPPORTED_PROVIDERS:
         raise ValueError(f"Unsupported LLM provider: {selected}")
     return selected
@@ -53,11 +63,15 @@ def resolve_provider(env_path: str | Path | None = None, provider: str | None = 
 
 def load_kimi_config(env_path: str | Path | None = None) -> KimiConfig:
     merged = _load_env(env_path)
+    model = merged.get("MOONSHOT_MODEL", "kimi-k2.5")
+    temperature = float(merged.get("MOONSHOT_TEMPERATURE", "0") or 0)
+    if model.startswith("kimi-k2.5"):
+        temperature = 1.0
     return KimiConfig(
         api_key=merged.get("MOONSHOT_API_KEY", ""),
         base_url=merged.get("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1"),
-        model=merged.get("MOONSHOT_MODEL", "kimi-k2.5"),
-        temperature=float(merged.get("MOONSHOT_TEMPERATURE", "0") or 0),
+        model=model,
+        temperature=temperature,
     )
 
 
@@ -68,4 +82,14 @@ def load_minimax_config(env_path: str | Path | None = None) -> MinimaxConfig:
         base_url=merged.get("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
         model=merged.get("MINIMAX_MODEL", "MiniMax-M2.5"),
         temperature=float(merged.get("MINIMAX_TEMPERATURE", "1.0") or 1.0),
+    )
+
+
+def load_zhipu_config(env_path: str | Path | None = None) -> ZhipuConfig:
+    merged = _load_env(env_path)
+    return ZhipuConfig(
+        api_key=merged.get("ZHIPU_API_KEY", ""),
+        base_url=merged.get("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
+        model=merged.get("ZHIPU_MODEL", "glm-4.5"),
+        temperature=float(merged.get("ZHIPU_TEMPERATURE", "0.6") or 0.6),
     )

@@ -13,7 +13,7 @@ CONTENT_TYPES_XML = b'''<?xml version="1.0" encoding="UTF-8"?>
 </Types>'''
 
 DOCUMENT_XML = b'''<?xml version="1.0" encoding="UTF-8"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <w:body>
     <w:p>
       <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
@@ -35,19 +35,79 @@ DOCUMENT_XML = b'''<?xml version="1.0" encoding="UTF-8"?>
       <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
       <w:r><w:t>References</w:t></w:r>
     </w:p>
+    <w:sectPr>
+      <w:headerReference w:type="default" r:id="rIdHeader1"/>
+      <w:footerReference w:type="default" r:id="rIdFooter1"/>
+      <w:titlePg/>
+      <w:pgSz w:w="12240" w:h="15840" w:orient="portrait"/>
+      <w:pgMar w:top="1440" w:right="1080" w:bottom="1440" w:left="1080" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:num="2" w:space="720" w:sep="1"/>
+    </w:sectPr>
   </w:body>
 </w:document>'''
 
 STYLES_XML = b'''<?xml version="1.0" encoding="UTF-8"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:styleId="Abstract">
+    <w:name w:val="Abstract"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr>
+      <w:spacing w:line="360" w:lineRule="atLeast"/>
+    </w:pPr>
+    <w:rPr>
+      <w:sz w:val="18"/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Title">
+    <w:name w:val="Title"/>
+    <w:pPr>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:rPr>
+      <w:rFonts w:ascii="Cambria" w:hAnsi="Cambria"/>
+      <w:sz w:val="28"/>
+      <w:b/>
+    </w:rPr>
+  </w:style>
   <w:style w:type="paragraph" w:styleId="Heading1">
     <w:name w:val="Heading 1"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:rPr>
+      <w:sz w:val="24"/>
+      <w:b/>
+    </w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading2">
     <w:name w:val="Heading 2"/>
+    <w:basedOn w:val="Normal"/>
+    <w:rPr>
+      <w:sz w:val="22"/>
+      <w:b/>
+    </w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Normal">
     <w:name w:val="Normal"/>
+    <w:pPr>
+      <w:spacing w:line="480" w:lineRule="exact"/>
+      <w:jc w:val="both"/>
+    </w:pPr>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>
+      <w:sz w:val="20"/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Caption">
+    <w:name w:val="Caption"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:rPr>
+      <w:i/>
+    </w:rPr>
   </w:style>
 </w:styles>'''
 
@@ -87,15 +147,31 @@ class FakePlanner:
 
 
 class DocxReaderTests(unittest.TestCase):
-    def test_reads_paragraphs_and_styles(self) -> None:
+    def test_reads_paragraphs_styles_and_layout_constraints(self) -> None:
         reader = DocxReader()
         record = reader.read(build_minimal_docx())
         self.assertEqual(len(record.paragraphs), 5)
         self.assertEqual(record.paragraphs[0].text, "I. INTRODUCTION")
         self.assertEqual(record.paragraphs[0].style_name, "Heading 1")
         self.assertIn("Heading1", record.styles)
+        self.assertEqual(record.styles["Normal"].formatting["font_family"], "Times New Roman")
+        self.assertEqual(record.styles["Normal"].formatting["font_size"], "10pt")
+        self.assertEqual(record.styles["Normal"].formatting["line_spacing"], "24pt")
+        self.assertEqual(record.styles["Normal"].formatting["line_spacing_rule"], "exact")
+        self.assertEqual(record.styles["Abstract"].formatting["line_spacing"], "18pt")
+        self.assertEqual(record.styles["Abstract"].formatting["line_spacing_rule"], "atLeast")
+        self.assertEqual(record.styles["Heading1"].formatting["font_family"], "Times New Roman")
+        self.assertEqual(record.styles["Heading1"].formatting["font_size"], "12pt")
+        self.assertEqual(record.styles["Caption"].formatting["italic"], True)
+        self.assertEqual(record.layout_constraints["page_margin_top"], "1.00in")
+        self.assertEqual(record.layout_constraints["page_margin_left"], "0.75in")
+        self.assertEqual(record.layout_constraints["column_count"], 2)
+        self.assertEqual(record.layout_constraints["column_spacing"], "0.50in")
+        self.assertEqual(record.layout_constraints["page_orientation"], "portrait")
+        self.assertTrue(record.layout_constraints["has_default_header"])
+        self.assertTrue(record.layout_constraints["different_first_page_header_footer"])
 
-    def test_template_file_parser_extracts_candidates_and_uses_planner(self) -> None:
+    def test_template_file_parser_extracts_candidates_and_file_constraints(self) -> None:
         parser = TemplateFileParser(understanding_planner=FakePlanner())
         result = parser.parse(build_minimal_docx(), document_family="ieee_cs")
         candidate_titles = [candidate.title for candidate in result.candidates]
@@ -106,6 +182,19 @@ class DocxReaderTests(unittest.TestCase):
         self.assertIn("References", titles)
         self.assertNotIn("II. Guidelines For Manuscript Preparation", titles)
         self.assertEqual(result.requirement.citation_style, "numeric_or_template_defined")
+        self.assertEqual(result.requirement.formatting_constraints["body_font_family"], "Times New Roman")
+        self.assertEqual(result.requirement.formatting_constraints["body_font_size"], "10pt")
+        self.assertEqual(result.requirement.formatting_constraints["body_line_spacing"], "24pt")
+        self.assertEqual(result.requirement.formatting_constraints["body_line_spacing_rule"], "exact")
+        self.assertEqual(result.requirement.formatting_constraints["title_font_family"], "Cambria")
+        self.assertEqual(result.requirement.formatting_constraints["caption_italic"], True)
+        self.assertEqual(result.requirement.formatting_constraints["page_margin_left"], "0.75in")
+        self.assertEqual(result.requirement.formatting_constraints["column_count"], 2)
+        self.assertEqual(result.requirement.formatting_constraints["column_spacing"], "0.50in")
+        self.assertEqual(result.requirement.formatting_constraints["page_orientation"], "portrait")
+        self.assertEqual(result.requirement.formatting_constraints["style_abstract_font_size"], "9pt")
+        self.assertEqual(result.requirement.formatting_constraints["style_abstract_line_spacing_rule"], "atLeast")
+        self.assertEqual(result.requirement.formatting_constraints["style_caption_italic"], True)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, UTC
 import json
+from pathlib import Path
 from typing import Protocol
 
 from md2word_agent.parser.models import TemplateCandidate
@@ -20,8 +22,9 @@ Never keep instructional sections such as writing guidelines, submission instruc
 
 
 class TemplateUnderstandingPlanner:
-    def __init__(self, client: JSONGenerator) -> None:
+    def __init__(self, client: JSONGenerator, output_dir: str | Path | None = None) -> None:
         self.client = client
+        self.output_dir = Path(output_dir) if output_dir else self._default_output_dir()
 
     def build_requirement(
         self,
@@ -51,7 +54,14 @@ class TemplateUnderstandingPlanner:
         }
         user_prompt = json.dumps(payload, ensure_ascii=False, indent=2)
         response = self.client.generate_json(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
-        return self._to_requirement(response, document_family)
+        requirement = self._to_requirement(response, document_family)
+        self._persist_run(
+            document_family=document_family,
+            payload=payload,
+            response=response,
+            requirement=requirement,
+        )
+        return requirement
 
     def _to_requirement(self, data: dict, document_family: str) -> TemplateRequirement:
         requirement = TemplateRequirement(
@@ -81,3 +91,28 @@ class TemplateUnderstandingPlanner:
                 )
             )
         return requirement
+
+    def _persist_run(
+        self,
+        *,
+        document_family: str,
+        payload: dict,
+        response: dict,
+        requirement: TemplateRequirement,
+    ) -> None:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        target = self.output_dir / f"{timestamp}_{document_family}_template_understanding.json"
+        artifact = {
+            "saved_at_utc": datetime.now(UTC).isoformat(),
+            "document_family": document_family,
+            "client_class": self.client.__class__.__name__,
+            "system_prompt": SYSTEM_PROMPT,
+            "user_prompt_payload": payload,
+            "model_response": response,
+            "normalized_requirement": requirement.to_dict(),
+        }
+        target.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _default_output_dir(self) -> Path:
+        return Path(__file__).resolve().parents[3] / "intermediate_outputs" / "template_understanding"

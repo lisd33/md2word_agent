@@ -12,7 +12,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from md2word_agent.llm import create_json_client, resolve_provider  # noqa: E402
-from md2word_agent.parser import TemplateFileParser  # noqa: E402
+from md2word_agent.merger import TemplateSpecMerger  # noqa: E402
+from md2word_agent.parser import RuleParser, TemplateFileParser  # noqa: E402
 from md2word_agent.planner import TemplateUnderstandingPlanner  # noqa: E402
 
 
@@ -21,9 +22,11 @@ def main() -> int:
     parser.add_argument("input", help="Path to a .docx template file")
     parser.add_argument("--document-family", default="unknown", help="Document family label to attach to the parsed requirement")
     parser.add_argument("--rules", help="Optional path to rule text / author guidelines to provide as extra context")
+    parser.add_argument("--merge-rules", action="store_true", help="Merge rule-derived and file-derived requirements into one template-side specification")
+    parser.add_argument("--show-merge-report", action="store_true", help="Also print merge conflicts and precedence rules")
     parser.add_argument("--show-candidates", action="store_true", help="Also print the extracted heading candidates before final filtering")
     parser.add_argument("--env-file", default=str(ROOT / ".env"), help="Path to the .env file containing API settings")
-    parser.add_argument("--provider", choices=["moonshot", "minimax"], help="Override the provider in .env for this run")
+    parser.add_argument("--provider", choices=["moonshot", "minimax", "zhipu"], help="Override the provider in .env for this run")
     args = parser.parse_args()
 
     provider = resolve_provider(args.env_file, args.provider)
@@ -34,19 +37,41 @@ def main() -> int:
     rule_text = None
     if args.rules:
         rule_text = Path(args.rules).read_text(encoding="utf-8")
+    if args.merge_rules and not rule_text:
+        parser.error("--merge-rules requires --rules")
 
     result = file_parser.parse(
         Path(args.input).read_bytes(),
         document_family=args.document_family,
         rule_text=rule_text,
     )
+    merge_result = None
+    if args.merge_rules and rule_text is not None:
+        rule_result = RuleParser().parse(rule_text, document_family=args.document_family)
+        merge_result = TemplateSpecMerger().merge(
+            rule_requirement=rule_result.requirement,
+            file_requirement=result.requirement,
+        )
 
     if args.show_candidates:
         print("# Candidates")
         print(json.dumps([candidate.to_dict() for candidate in result.candidates], ensure_ascii=False, indent=2))
         print("\n# Requirement")
     print(f"# Provider: {provider}")
-    print(json.dumps(result.requirement.to_dict(), ensure_ascii=False, indent=2))
+    final_requirement = merge_result.requirement if merge_result else result.requirement
+    print(json.dumps(final_requirement.to_dict(), ensure_ascii=False, indent=2))
+    if args.show_merge_report and merge_result is not None:
+        print("\n# Merge Diagnostics")
+        print(
+            json.dumps(
+                {
+                    "conflicts": [conflict.to_dict() for conflict in merge_result.conflicts],
+                    "precedence_rules": merge_result.precedence_rules,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     return 0
 
 

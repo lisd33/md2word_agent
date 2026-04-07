@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .config import load_kimi_config, load_minimax_config, resolve_provider
+from .config import load_kimi_config, load_minimax_config, load_zhipu_config, resolve_provider
 from .kimi_client import KimiClient
 from .minimax_client import MinimaxClient
+from .zhipu_client import ZhipuClient
 
 
 def create_json_client(*, env_path: str | Path | None = None, provider: str | None = None):
@@ -13,4 +14,6 @@ def create_json_client(*, env_path: str | Path | None = None, provider: str | No
         return KimiClient(load_kimi_config(env_path))
     if selected == "minimax":
         return MinimaxClient(load_minimax_config(env_path))
+    if selected == "zhipu":
+        return ZhipuClient(load_zhipu_config(env_path))
     raise ValueError(f"Unsupported LLM provider: {selected}")

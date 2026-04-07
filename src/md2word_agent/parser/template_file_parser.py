@@ -92,9 +92,61 @@ class TemplateFileParser:
             document_family=document_family,
             rule_text=rule_text,
         )
+        requirement.formatting_constraints.update(self._extract_formatting_constraints(record))
         if "template_file" not in requirement.source_kinds:
             requirement.source_kinds.insert(0, "template_file")
         return TemplateFileParseResult(requirement=requirement, candidates=candidates, raw_record=record)
+
+    def _extract_formatting_constraints(
+        self,
+        record: DocxDocumentRecord,
+    ) -> dict[str, str | int | float | bool]:
+        constraints = dict(record.layout_constraints)
+        style_targets = {
+            "title": self._find_style(record, style_ids={"Title"}, style_names={"title"}),
+            "body": self._find_style(record, style_ids={"Normal"}, style_names={"normal", "body text", "正文"}),
+            "caption": self._find_style(record, style_ids={"Caption"}, style_names={"caption", "题注"}),
+            "heading_1": self._find_style(record, style_ids={"Heading1"}, style_names={"heading 1", "标题 1"}),
+            "heading_2": self._find_style(record, style_ids={"Heading2"}, style_names={"heading 2", "标题 2"}),
+        }
+        for prefix, style in style_targets.items():
+            if style is None:
+                continue
+            for key, value in style.formatting.items():
+                constraints[f"{prefix}_{key}"] = value
+
+        for style in record.styles.values():
+            if style.style_type != "paragraph":
+                continue
+            style_key = self._style_export_key(style)
+            if not style_key:
+                continue
+            for key, value in style.formatting.items():
+                constraints[f"style_{style_key}_{key}"] = value
+        return constraints
+
+    def _find_style(
+        self,
+        record: DocxDocumentRecord,
+        *,
+        style_ids: set[str],
+        style_names: set[str],
+    ):
+        normalized_ids = {item.lower() for item in style_ids}
+        normalized_names = {item.lower() for item in style_names}
+        for style in record.styles.values():
+            if style.style_id.lower() in normalized_ids:
+                return style
+            if style.style_name and style.style_name.strip().lower() in normalized_names:
+                return style
+        return None
+
+    def _style_export_key(self, style) -> str | None:
+        raw = style.style_name or style.style_id
+        if not raw:
+            return None
+        normalized = re.sub(r"[^a-z0-9]+", "_", raw.strip().lower()).strip("_")
+        return normalized or None
 
     def _infer_heading_level(self, paragraph: ParagraphRecord) -> int | None:
         style_name = (paragraph.style_name or "").strip().lower()

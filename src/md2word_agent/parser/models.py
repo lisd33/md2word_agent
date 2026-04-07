@@ -16,12 +16,15 @@ class StyleRecord:
     style_id: str
     style_name: str | None = None
     based_on: str | None = None
+    style_type: str | None = None
+    formatting: dict[str, str | int | float | bool] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
 class DocxDocumentRecord:
     paragraphs: list[ParagraphRecord] = field(default_factory=list)
     styles: dict[str, StyleRecord] = field(default_factory=dict)
+    layout_constraints: dict[str, str | int | float | bool] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

@@ -523,6 +523,7 @@ Files added:
 - `src/md2word_agent/llm/kimi_client.py`
 - `src/md2word_agent/llm/minimax_client.py`
 - `src/md2word_agent/llm/factory.py`
+- `src/md2word_agent/llm/zhipu_client.py`
 
 Purpose of this folder:
 
@@ -677,7 +678,7 @@ PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
 
 #### Result
 
-- total tests after restarted Stage 3: 18
+- total tests after restarted Stage 3: 21
 - status: OK
 
 Validated behaviors now include:
@@ -690,6 +691,7 @@ Validated behaviors now include:
 - Kimi `.env` loading is now covered by default test discovery
 - planner response-to-requirement conversion is now covered by a local fake-client unit test
 - provider selection and MiniMax client construction are covered by local unit tests
+- Zhipu config loading, provider alias resolution, and client construction are covered by local unit tests
 
 ### Files Added Or Updated In Restarted Stage 3
 
@@ -701,6 +703,7 @@ Added:
 - `src/md2word_agent/llm/kimi_client.py`
 - `src/md2word_agent/llm/minimax_client.py`
 - `src/md2word_agent/llm/factory.py`
+- `src/md2word_agent/llm/zhipu_client.py`
 - `src/md2word_agent/planner/__init__.py`
 - `src/md2word_agent/planner/template_understanding.py`
 - `tests/test_llm_config.py`
@@ -726,7 +729,7 @@ What changed in project state:
 - `.docx` parsing no longer ends at hardcoded heading extraction
 - the project now has an explicit LLM-based template-understanding layer
 - API-based Kimi initialization is now part of the repository structure
-- the LLM layer now supports both Moonshot/Kimi and MiniMax as selectable providers
+- the LLM layer now supports Moonshot/Kimi, MiniMax, and Zhipu as selectable providers
 - the scripts folder now reflects the revised architecture
 - Stage 1 and Stage 2 remain usable without rework
 
@@ -752,3 +755,183 @@ That means the next implementation step should focus on:
 - defining precedence and conflict-resolution rules
 - preserving both raw evidence and normalized template requirements
 - preparing the cleaned template-side result for later content-intent alignment
+
+---
+
+## Stage 3 Tooling Update: Local HTTP API Interface
+
+### Update Goal
+
+Add a local HTTP interface on top of the existing parser and planner pipeline so Stage 2 and Stage 3 can be tested through API calls instead of only through Python scripts.
+
+### Work Completed
+
+#### 1. Added API service layer
+
+Added:
+
+- `src/md2word_agent/api/__init__.py`
+- `src/md2word_agent/api/service.py`
+- `src/md2word_agent/api/server.py`
+
+Current service responsibilities:
+
+- expose `parse_rule_text()` for Stage 2 rule normalization
+- expose `parse_docx_template()` for Stage 3 template parsing
+- support local `.docx` path input
+- support base64 `.docx` input
+- preserve provider selection through the existing LLM factory
+
+#### 2. Added local HTTP server entry point
+
+Added:
+
+- `scripts/run_api_server.py`
+
+This script starts a local HTTP server without introducing an external web framework dependency.
+
+Current routes:
+
+- `GET /health`
+- `GET /providers`
+- `POST /api/v1/parse/rules`
+- `POST /api/v1/parse/template`
+
+#### 3. Added API documentation directory
+
+Added:
+
+- `api/README.md`
+
+This document now serves as the API usage guide and includes:
+
+- startup instructions
+- health-check example
+- provider-check example
+- rule parsing request example
+- template parsing request example
+- base64 upload example
+
+#### 4. Added API-layer unit tests
+
+Added:
+
+- `tests/api/__init__.py`
+- `tests/api/test_service.py`
+
+Current API-layer test coverage includes:
+
+- Stage 2 parsing through `ParseAPIService`
+- Stage 3 template parsing through `ParseAPIService`
+- `.docx` path input handling
+- fake-client injection for non-network planner validation
+
+### Verification For API Update
+
+#### Test command
+
+From `md2word_agent/`, ran:
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+#### Result
+
+- total tests after API update: 23
+- status: OK
+
+Also verified startup script help:
+
+```bash
+python scripts/run_api_server.py --help
+```
+
+### Current Testing Entry Points
+
+You can now test the project in three ways:
+
+- CLI: `scripts/parse_rule_text.py`
+- CLI: `scripts/parse_docx_template.py`
+- HTTP API: `scripts/run_api_server.py`
+
+### Current Interface Boundary
+
+The local API is intentionally thin.
+
+It does not add new parsing logic. It only wraps existing Stage 2 and Stage 3 capabilities so they are easier to test and automate.
+
+---
+
+## Stage 3 Tooling Update: Intermediate Outputs And Project Tree
+
+### Update Goal
+
+Make Stage 3 outputs easier to inspect by persisting the final model result to disk, and add a dedicated project-tree document so the current repository structure is easier to understand.
+
+### Work Completed
+
+#### 1. Added automatic intermediate output persistence
+
+Updated:
+
+- `src/md2word_agent/planner/template_understanding.py`
+
+Current behavior:
+
+- every Stage 3 planner run now saves a JSON artifact under `intermediate_outputs/template_understanding/`
+- each artifact contains the prompt payload, the final model response, and the normalized `TemplateRequirement`
+- the output directory is created automatically when needed
+
+#### 2. Added intermediate output documentation
+
+Added:
+
+- `intermediate_outputs/README.md`
+- `intermediate_outputs/template_understanding/README.md`
+
+These files explain what is stored in the new output directory and what fields appear in each generated JSON artifact.
+
+#### 3. Added project tree documentation
+
+Added:
+
+- `PROJECT_TREE.md`
+
+This file documents:
+
+- the current repository tree
+- the role of each major source file
+- the current runtime flow
+- the mapping between repository modules and project stages
+
+#### 4. Extended planner tests
+
+Updated:
+
+- `tests/planner/test_template_understanding.py`
+
+The planner test now verifies not only the normalized requirement but also that a JSON artifact is actually written to disk.
+
+### Verification For Output And Tree Update
+
+#### Test command
+
+From `md2word_agent/`, ran:
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+#### Result
+
+- total tests after output/tree update: 23
+- status: OK
+
+### Practical Result
+
+After this update, a real Stage 3 run through either the CLI or the HTTP API will leave an inspectable JSON file in:
+
+- `intermediate_outputs/template_understanding/`
+
+This makes it easier to audit the model output without relying only on terminal logs.
